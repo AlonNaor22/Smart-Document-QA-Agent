@@ -4,3 +4,19 @@
 # Ignore Claude temporary files
 .claude/
 tmpclaude-*
+
+# Environment variables (API keys - NEVER commit these!)
+.env
+
+# Python virtual environment
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Vector database storage (can be large)
+chroma_db/
+
+# Data folder (test documents - may contain personal files)
+data/

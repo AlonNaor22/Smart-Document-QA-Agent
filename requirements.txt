@@ -1,0 +1,62 @@
+# =============================================================================
+# Smart Document Q&A Agent - Dependencies
+# =============================================================================
+#
+# Install all dependencies with:
+#     pip install -r requirements.txt
+#
+# Or using a virtual environment (recommended):
+#     python -m venv venv
+#     venv/Scripts/activate  (Windows) or source venv/bin/activate (Mac/Linux)
+#     pip install -r requirements.txt
+#
+
+# -----------------------------------------------------------------------------
+# Core LangChain Framework
+# -----------------------------------------------------------------------------
+# LangChain provides the "glue" that connects all components:
+# - Document loaders, text splitters, chains, etc.
+langchain>=0.1.0
+langchain-core>=0.1.0
+langchain-community>=0.0.10
+langchain-text-splitters>=0.0.1
+
+# LangChain + Anthropic integration for Claude
+langchain-anthropic>=0.1.0
+
+# LangChain + HuggingFace integration for embeddings
+langchain-huggingface>=0.0.1
+
+# -----------------------------------------------------------------------------
+# AI/ML - Anthropic Claude
+# -----------------------------------------------------------------------------
+# Official Anthropic SDK for Claude API
+anthropic>=0.18.0
+
+# -----------------------------------------------------------------------------
+# Document Processing
+# -----------------------------------------------------------------------------
+# PyPDF for reading PDF files
+# Note: LangChain uses 'pypdf' (not 'pypdf2')
+pypdf>=3.0.0
+
+# -----------------------------------------------------------------------------
+# Vector Database
+# -----------------------------------------------------------------------------
+# ChromaDB - local vector database for semantic search
+# Stores embeddings and enables similarity search
+chromadb>=0.4.22
+
+# -----------------------------------------------------------------------------
+# Embeddings
+# -----------------------------------------------------------------------------
+# Sentence Transformers - converts text to vectors
+# Runs locally on CPU (no API costs!)
+# Model used: all-MiniLM-L6-v2 (384 dimensions)
+sentence-transformers>=2.3.0
+
+# -----------------------------------------------------------------------------
+# Utilities
+# -----------------------------------------------------------------------------
+# Load environment variables from .env file
+python-dotenv>=1.0.0

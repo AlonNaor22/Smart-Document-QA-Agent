@@ -1,5 +1,6 @@
-# Ignore markdown files
+# Ignore markdown files (except README)
 *.md
+!README.md
 
 # Ignore Claude temporary files
 .claude/

@@ -1,0 +1,6 @@
+# Ignore markdown files
+*.md
+
+# Ignore Claude temporary files
+.claude/
+tmpclaude-*

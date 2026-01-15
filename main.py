@@ -5,9 +5,16 @@ Smart Document Q&A Agent - Main Entry Point
 
 This is the command-line interface (CLI) for the Document Q&A system.
 Run this file to start an interactive session where you can:
-1. Load a PDF document
+1. Load a document (PDF, DOCX, TXT, or MD)
 2. Ask questions about its content
 3. Get AI-powered answers with source references
+
+SUPPORTED FILE FORMATS
+----------------------
+- PDF  (.pdf)  - Adobe PDF documents
+- DOCX (.docx) - Microsoft Word documents
+- TXT  (.txt)  - Plain text files
+- MD   (.md)   - Markdown files
 
 HOW TO RUN
 ----------
@@ -22,7 +29,7 @@ WHAT HAPPENS WHEN YOU RUN THIS
 ------------------------------
 
 1. Application starts and shows welcome message
-2. You enter a path to a PDF file
+2. You enter a path to a document file
 3. System processes the document:
    - Extracts text from PDF
    - Splits into chunks
@@ -60,7 +67,12 @@ import sys
 
 # Import our custom modules
 # Each module handles a specific part of the RAG pipeline
-from src.document_loader import load_and_split_pdf
+from src.document_loader import (
+    load_and_split_document,
+    load_and_split_folder,
+    is_folder,
+    SUPPORTED_EXTENSIONS
+)
 from src.vector_store import create_vector_store, CHROMA_PERSIST_DIR
 from src.qa_chain import create_qa_chain, ask_question, format_response
 
@@ -88,8 +100,11 @@ def print_header():
     """
     print("=" * 60)
     print("       Smart Document Q&A Agent")
-    print("       Ask questions about your PDF documents")
+    print("       Ask questions about your documents")
     print("=" * 60)
+    print()
+    print("Supports: PDF, DOCX, TXT, MD")
+    print("You can load a SINGLE FILE or an entire FOLDER!")
     print()
     print("This application uses RAG (Retrieval Augmented Generation)")
     print("to answer questions based on YOUR documents, not general")
@@ -102,11 +117,14 @@ def print_help():
     Display available commands to the user.
     """
     print("\nAvailable commands:")
-    print("  [any question]  - Ask about the document")
+    print("  [any question]  - Ask about your document(s)")
     print("  'quit' or 'exit'- Leave the application")
-    print("  'new'           - Load a different document")
+    print("  'new'           - Load different document(s)")
     print("  'clear'         - Clear conversation history")
     print("  'help'          - Show this message")
+    print()
+    print("Tip: If you loaded multiple documents, your questions")
+    print("     will search across ALL of them!")
     print()
 
 
@@ -114,26 +132,35 @@ def print_help():
 # INPUT HANDLING
 # =============================================================================
 
-def get_pdf_path() -> str:
+def get_document_path() -> str:
     """
-    Prompt user for a PDF file path and validate it.
+    Prompt user for a document file OR folder path and validate it.
 
     This function:
-    1. Asks for a file path
+    1. Asks for a file or folder path
     2. Cleans up the input (removes quotes, whitespace)
-    3. Validates the file exists and is a PDF
-    4. Loops until valid input or user quits
+    3. Validates the path exists
+    4. For files: checks it's a supported format
+    5. For folders: accepts it (will scan for documents inside)
+    6. Loops until valid input or user quits
+
+    Supported formats: PDF, DOCX, TXT, MD
 
     Returns:
-        str: Valid path to a PDF file
+        str: Valid path to a document file OR a folder
 
     User Experience Notes:
         - Handles copy-pasted paths with quotes
         - Gives helpful error messages
         - Allows empty input to retry
     """
+    # Create a nice display of supported formats
+    formats_display = ', '.join(SUPPORTED_EXTENSIONS)
+
     while True:
-        print("Enter the path to your PDF file")
+        print(f"Enter the path to your document OR folder")
+        print(f"  - Single file: path to a {formats_display} file")
+        print(f"  - Multiple files: path to a folder containing documents")
         print("(or 'quit' to exit)")
         path = input("> ").strip()
 
@@ -148,19 +175,24 @@ def get_pdf_path() -> str:
 
         # Validate: not empty
         if not path:
-            print("Please enter a file path.\n")
+            print("Please enter a path.\n")
             continue
 
-        # Validate: file exists
+        # Validate: path exists
         if not os.path.exists(path):
-            print(f"\nFile not found: {path}")
+            print(f"\nPath not found: {path}")
             print("Please check the path and try again.\n")
             continue
 
-        # Validate: is a PDF
-        if not path.lower().endswith('.pdf'):
-            print("\nPlease provide a PDF file (.pdf extension).")
-            print("Other formats are not supported in this version.\n")
+        # If it's a folder, accept it (we'll scan for documents inside)
+        if os.path.isdir(path):
+            return path
+
+        # If it's a file, validate the format
+        file_extension = os.path.splitext(path)[1].lower()
+        if file_extension not in SUPPORTED_EXTENSIONS:
+            print(f"\nUnsupported file format: {file_extension}")
+            print(f"Supported formats: {formats_display}\n")
             continue
 
         return path
@@ -170,20 +202,24 @@ def get_pdf_path() -> str:
 # DOCUMENT PROCESSING
 # =============================================================================
 
-def process_document(pdf_path: str):
+def process_document(path: str):
     """
-    Load and process a PDF document through the RAG pipeline.
+    Load and process document(s) through the RAG pipeline.
+
+    This function handles BOTH single files AND folders:
+    - Single file: Loads just that document
+    - Folder: Loads ALL supported documents inside
 
     This is where the "magic" happens before you can ask questions:
 
     Steps:
-        1. Load PDF and split into chunks
+        1. Load document(s) and split into chunks
         2. Create embeddings for each chunk
         3. Store in vector database
         4. Create the QA chain
 
     Args:
-        pdf_path: Path to the PDF file
+        path: Path to a document file OR a folder containing documents
 
     Returns:
         QAChain: Ready to answer questions
@@ -191,31 +227,56 @@ def process_document(pdf_path: str):
     Time Expectations:
         - First run: 30-60 seconds (downloads embedding model)
         - Subsequent: 5-15 seconds depending on document size
-        - Larger documents = more chunks = longer processing
-
-    What's Happening Behind the Scenes:
-        1. PyPDF reads the PDF file
-        2. Text is extracted from each page
-        3. Text is split into ~1000 character chunks with overlap
-        4. Each chunk is converted to a 384-dimension vector
-        5. Vectors are stored in ChromaDB
-        6. QAChain is initialized with the vector store
+        - More documents = more chunks = longer processing
     """
-    print(f"\nProcessing: {os.path.basename(pdf_path)}")
-    print("-" * 40)
+    # Check if path is a folder or single file
+    is_folder_path = is_folder(path)
+
+    if is_folder_path:
+        print(f"\nProcessing folder: {os.path.basename(path)}")
+    else:
+        print(f"\nProcessing: {os.path.basename(path)}")
+    print("-" * 50)
 
     # ===== STEP 1: LOAD AND SPLIT =====
-    print("\n[1/3] Loading PDF and splitting into chunks...")
-    print("      (Extracting text, creating chunks with overlap)")
+    if is_folder_path:
+        print("\n[1/3] Loading ALL documents from folder...")
+        print("      (Scanning for PDF, DOCX, TXT, MD files)")
 
-    chunks = load_and_split_pdf(pdf_path)
+        chunks, summary = load_and_split_folder(path)
 
-    print(f"      Done! Created {len(chunks)} text chunks")
-    print(f"      Average chunk size: ~{sum(len(c.page_content) for c in chunks) // len(chunks)} characters")
+        # Show what was loaded
+        print(f"\n      Files found: {summary['total_files']}")
+        print(f"      Successfully loaded: {summary['successful']}")
+
+        if summary['files_loaded']:
+            print("\n      Loaded files:")
+            for file_info in summary['files_loaded']:
+                print(f"        - {file_info['filename']}")
+
+        if summary['files_failed']:
+            print(f"\n      Failed to load: {summary['failed']}")
+            for file_info in summary['files_failed']:
+                print(f"        - {file_info['filename']}: {file_info['error']}")
+
+        print(f"\n      Total chunks created: {len(chunks)}")
+
+    else:
+        print("\n[1/3] Loading document and splitting into chunks...")
+        print("      (Extracting text, creating chunks with overlap)")
+
+        chunks = load_and_split_document(path)
+
+        print(f"      Done! Created {len(chunks)} text chunks")
+
+    # Show average chunk size
+    if chunks:
+        avg_size = sum(len(c.page_content) for c in chunks) // len(chunks)
+        print(f"      Average chunk size: ~{avg_size} characters")
 
     # ===== STEP 2: CREATE EMBEDDINGS =====
     print("\n[2/3] Creating embeddings and storing in vector database...")
-    print("      (Converting text to vectors for semantic search)")
+    print("      (Clearing old data and creating fresh embeddings)")
     print("      This may take 30+ seconds on first run...")
 
     # This step:
@@ -233,7 +294,12 @@ def process_document(pdf_path: str):
     qa_chain = create_qa_chain(vector_store)
 
     print("      Done! Ready to answer questions")
-    print("-" * 40)
+    print("-" * 50)
+
+    # Show helpful message for folder loading
+    if is_folder_path:
+        print(f"\nYou can now ask questions about ALL {summary['successful']} documents!")
+        print("The AI will search across all files to find relevant information.")
 
     return qa_chain
 
@@ -264,7 +330,7 @@ def chat_loop(qa_chain):
         - Keyboard interrupt handling (Ctrl+C)
     """
     print("\n" + "=" * 60)
-    print("Document loaded! You can now ask questions.")
+    print("Ready! You can now ask questions about your document(s).")
     print_help()
     print("=" * 60)
 
@@ -355,11 +421,11 @@ def main():
     # Allows loading multiple documents without restarting
     while True:
         try:
-            # Get PDF path from user
-            pdf_path = get_pdf_path()
+            # Get document path from user (supports PDF, DOCX, TXT, MD)
+            file_path = get_document_path()
 
             # Process the document (load, embed, store)
-            qa_chain = process_document(pdf_path)
+            qa_chain = process_document(file_path)
 
             # Enter the chat loop
             result = chat_loop(qa_chain)

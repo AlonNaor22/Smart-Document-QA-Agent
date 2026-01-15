@@ -65,6 +65,9 @@ USAGE EXAMPLE
         print(doc.page_content)
 """
 
+import os
+import shutil
+
 # Use the new HuggingFace integration (fixes deprecation warning)
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
@@ -116,14 +119,37 @@ def create_embeddings_model():
     return embeddings
 
 
+def clear_vector_store(persist_directory: str = CHROMA_PERSIST_DIR):
+    """
+    Delete the existing vector store to start fresh.
+
+    This removes all previously stored embeddings so that when you
+    load a new document, you only search within that document.
+
+    Args:
+        persist_directory: Folder where the database is stored
+
+    Why This Exists:
+        ChromaDB adds new documents to existing data by default.
+        When loading a different document, we want to start fresh
+        so searches only return results from the NEW document.
+    """
+    if os.path.exists(persist_directory):
+        shutil.rmtree(persist_directory)
+
+
 def create_vector_store(chunks: list, persist_directory: str = CHROMA_PERSIST_DIR):
     """
     Create a new vector store from document chunks.
 
+    IMPORTANT: This clears any existing data first! Each time you load
+    a new document, the old embeddings are deleted and replaced.
+
     This is where the "indexing" happens:
-    1. Each chunk's text is converted to a vector
-    2. Vectors are stored in ChromaDB
-    3. The database is saved to disk
+    1. Clear old database (if exists)
+    2. Each chunk's text is converted to a vector
+    3. Vectors are stored in ChromaDB
+    4. The database is saved to disk
 
     Args:
         chunks: List of Document objects from document_loader
@@ -151,6 +177,10 @@ def create_vector_store(chunks: list, persist_directory: str = CHROMA_PERSIST_DI
     Pipeline Position:
         load_pdf -> split -> [create_vector_store] -> search -> LLM
     """
+    # Clear any existing database so we start fresh
+    # This ensures searches only return results from the NEW document
+    clear_vector_store(persist_directory)
+
     # Get the embeddings model
     embeddings = create_embeddings_model()
 

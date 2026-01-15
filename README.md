@@ -1,22 +1,42 @@
 # Smart Document Q&A Agent
 
-An AI-powered document question-answering system using RAG (Retrieval Augmented Generation). Upload a PDF and ask questions about its content - get accurate answers with source references.
+An AI-powered document question-answering system using RAG (Retrieval Augmented Generation). Upload documents and ask questions about their content - get accurate answers with source references and confidence scores.
 
-## What It Does
+## Features
 
-- **Load PDF documents** - Extract and process text from any PDF
-- **Ask questions in natural language** - "What are the main findings?" or "Summarize section 3"
-- **Get AI-powered answers** - Claude analyzes relevant sections and responds
-- **See source references** - Know exactly which parts of the document the answer came from
-- **Have conversations** - Follow-up questions work thanks to conversation memory
+- **Multiple File Formats** - Support for PDF, DOCX, TXT, and Markdown files
+- **Multi-Document Search** - Load entire folders and search across all documents at once
+- **Confidence Scores** - See how relevant each source is (0-100%)
+- **Source Highlighting** - Know exactly which file and section the answer came from
+- **Conversation Memory** - Follow-up questions work naturally
+- **Two Interfaces** - Command-line (CLI) or Web UI (Streamlit)
+
+## Screenshots
+
+### Web Interface
+```
+┌─────────────────────────────────────────────────────────────┐
+│  SIDEBAR                    │  MAIN CHAT AREA               │
+│  ─────────                  │  ─────────────                 │
+│  📄 Document Q&A            │  💬 Chat with Your Documents   │
+│                             │                                │
+│  [Upload Documents]         │  User: What is this about?     │
+│   Drag & drop files         │                                │
+│                             │  Assistant: Based on the       │
+│  📚 Loaded Documents        │  document, it discusses...     │
+│   • report.pdf (12 chunks)  │                                │
+│   • notes.txt (8 chunks)    │  📚 Sources (4 chunks)         │
+│                             │    report.pdf | 92% match      │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## How It Works (RAG Pipeline)
 
 ```
-PDF Document
+Documents (PDF, DOCX, TXT, MD)
      |
      v
-[1. Text Extraction] --> Extract text from each page
+[1. Text Extraction] --> Extract text from each file
      |
      v
 [2. Chunking] --> Split into ~1000 char chunks with overlap
@@ -31,19 +51,19 @@ PDF Document
 [5. User Question] --> Convert question to vector
      |
      v
-[6. Retrieval] --> Find most similar chunks
+[6. Retrieval] --> Find most similar chunks + confidence scores
      |
      v
 [7. Generation] --> Send chunks + question to Claude
      |
      v
-Answer with Sources
+Answer with Sources & Confidence Scores
 ```
 
 **Why RAG?**
-- You can't feed a 500-page PDF directly to an AI (too large, too expensive)
+- You can't feed a 500-page document directly to an AI (too large, too expensive)
 - RAG finds only the relevant parts and sends those to the AI
-- Results in accurate, grounded answers based on YOUR document
+- Results in accurate, grounded answers based on YOUR documents
 
 ## Quick Start
 
@@ -85,33 +105,67 @@ Get your API key from [console.anthropic.com](https://console.anthropic.com/)
 
 ### 5. Run the Application
 
+**Option A: Command Line Interface**
 ```bash
 python main.py
 ```
 
-## Commands
+**Option B: Web Interface (Recommended)**
+```bash
+streamlit run app.py
+```
+
+## Supported File Formats
+
+| Format | Extension | Description |
+|--------|-----------|-------------|
+| PDF | `.pdf` | Adobe PDF documents |
+| Word | `.docx` | Microsoft Word documents |
+| Text | `.txt` | Plain text files |
+| Markdown | `.md` | Markdown files |
+
+## Usage
+
+### CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `[any question]` | Ask about the document |
+| `[any question]` | Ask about your document(s) |
 | `quit` or `exit` | Leave the application |
-| `new` | Load a different document |
+| `new` | Load different document(s) |
 | `clear` | Clear conversation history |
 | `help` | Show available commands |
+
+### Loading Documents
+
+**Single File:**
+```
+Enter the path to your document OR folder
+> C:\path\to\document.pdf
+```
+
+**Multiple Files (Folder):**
+```
+Enter the path to your document OR folder
+> C:\path\to\folder
+```
+
+The system will automatically find and load all supported files in the folder.
 
 ## Project Structure
 
 ```
 Smart-Document-QA-Agent/
 ├── main.py                 # CLI entry point
+├── app.py                  # Web UI (Streamlit)
 ├── requirements.txt        # Python dependencies
 ├── .env                    # API key (create this)
 ├── src/
 │   ├── config.py           # All settings in one place
-│   ├── document_loader.py  # PDF loading & text chunking
+│   ├── document_loader.py  # Multi-format document loading
 │   ├── vector_store.py     # Embeddings & ChromaDB
 │   └── qa_chain.py         # Q&A logic with Claude
-├── data/                   # Place your PDFs here
+├── data/                   # Place your documents here
 └── chroma_db/              # Vector database (auto-created)
 ```
 
@@ -133,7 +187,19 @@ All settings are in `src/config.py`:
 - **[Anthropic Claude](https://www.anthropic.com/)** - LLM for question answering
 - **[ChromaDB](https://www.trychroma.com/)** - Vector database
 - **[HuggingFace](https://huggingface.co/)** - Embeddings model (all-MiniLM-L6-v2)
+- **[Streamlit](https://streamlit.io/)** - Web interface
 - **[PyPDF](https://pypdf.readthedocs.io/)** - PDF text extraction
+- **[docx2txt](https://github.com/ankushshah89/python-docx2txt)** - Word document extraction
+
+## Understanding Confidence Scores
+
+When you ask a question, each source chunk shows a confidence score:
+
+| Score | Meaning | Color (Web UI) |
+|-------|---------|----------------|
+| 80-100% | Highly relevant - strong match | Green |
+| 60-79% | Good relevance - likely useful | Orange |
+| Below 60% | Lower relevance - may be tangential | Red |
 
 ## Learning Resources
 
@@ -147,6 +213,7 @@ Key concepts covered:
 - Text embeddings and vector similarity
 - Prompt engineering
 - Conversation memory
+- Multi-document retrieval
 
 ## License
 

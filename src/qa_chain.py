@@ -264,9 +264,35 @@ class QAChain:
         # Join with double newlines for readability
         return "\n\n".join(context_parts)
 
+    def _distance_to_confidence(self, distance: float) -> float:
+        """
+        Convert ChromaDB distance score to a confidence percentage.
+
+        ChromaDB uses L2 (Euclidean) distance by default:
+        - 0.0 = identical (100% confidence)
+        - Higher values = less similar
+
+        We convert this to a percentage where:
+        - 100% = perfect match
+        - 0% = completely unrelated
+
+        The formula: confidence = max(0, (2 - distance) / 2 * 100)
+        This maps distance 0->100%, distance 2->0%
+
+        Args:
+            distance: The L2 distance from ChromaDB (typically 0 to 2+)
+
+        Returns:
+            Confidence percentage (0 to 100)
+        """
+        # Clamp to reasonable range and convert to percentage
+        # Distance of 0 = 100%, Distance of 2+ = 0%
+        confidence = max(0, (2 - distance) / 2) * 100
+        return round(confidence, 1)
+
     def ask(self, question: str, max_retries: int = MAX_RETRIES) -> dict:
         """
-        Ask a question and get an answer with sources.
+        Ask a question and get an answer with sources and confidence scores.
 
         This is the main method - it orchestrates the entire RAG flow.
 
@@ -278,22 +304,33 @@ class QAChain:
             Dictionary containing:
             - 'answer': The generated response from Claude
             - 'source_documents': The chunks used to generate the answer
+            - 'confidence_scores': List of confidence percentages for each chunk
 
         The Flow:
-            1. Retrieve relevant chunks from vector store
+            1. Retrieve relevant chunks WITH SCORES from vector store
             2. Format context and chat history
             3. Send to Claude (with retry logic)
             4. Save Q&A to memory
-            5. Return answer and sources
+            5. Return answer, sources, and confidence scores
 
         Error Handling:
             - API overloaded: Retries with exponential backoff
             - Other errors: Raised to caller
         """
-        # ===== STEP 1: RETRIEVE =====
-        # Use the retriever to find relevant chunks
-        # This converts the question to a vector and finds similar chunks
-        docs = self.retriever.invoke(question)
+        # ===== STEP 1: RETRIEVE WITH SCORES =====
+        # Use similarity_search_with_score to get relevance scores
+        # Returns list of (Document, distance) tuples
+        results_with_scores = self.vector_store.similarity_search_with_score(
+            question,
+            k=TOP_K_RESULTS
+        )
+
+        # Separate documents and scores
+        docs = [doc for doc, score in results_with_scores]
+        distances = [score for doc, score in results_with_scores]
+
+        # Convert distances to confidence percentages
+        confidence_scores = [self._distance_to_confidence(d) for d in distances]
 
         # ===== STEP 2: AUGMENT =====
         # Format the retrieved docs and history for the prompt
@@ -331,7 +368,8 @@ class QAChain:
         # ===== STEP 5: RETURN =====
         return {
             "answer": answer,
-            "source_documents": docs  # Include sources for transparency
+            "source_documents": docs,
+            "confidence_scores": confidence_scores  # NEW: Include confidence scores
         }
 
     def clear_history(self):
@@ -422,12 +460,89 @@ def _sanitize_text(text: str) -> str:
     return text.encode('ascii', 'replace').decode('ascii')
 
 
+def _get_filename_from_path(file_path: str) -> str:
+    """
+    Extract just the filename from a full path.
+
+    Example:
+        >>> _get_filename_from_path("C:/docs/report.pdf")
+        'report.pdf'
+    """
+    # Handle both Windows and Unix paths
+    return os.path.basename(file_path) if file_path else "Unknown"
+
+
+def _format_source_preview(text: str, max_length: int = 300) -> str:
+    """
+    Create a clean, readable preview of source text.
+
+    This function:
+    1. Cleans up whitespace (removes excessive newlines/spaces)
+    2. Truncates to max_length characters
+    3. Tries to end at a word boundary
+    4. Wraps text for better readability
+
+    Args:
+        text: The raw source text
+        max_length: Maximum characters to show
+
+    Returns:
+        Cleaned and truncated text preview
+    """
+    # Clean up whitespace - replace multiple spaces/newlines with single space
+    cleaned = ' '.join(text.split())
+
+    # Truncate if needed
+    if len(cleaned) > max_length:
+        # Try to cut at a word boundary
+        truncated = cleaned[:max_length]
+        last_space = truncated.rfind(' ')
+        if last_space > max_length * 0.7:  # Only if we don't lose too much
+            truncated = truncated[:last_space]
+        cleaned = truncated + "..."
+
+    return cleaned
+
+
+def _wrap_text(text: str, width: int = 70, indent: str = "    ") -> str:
+    """
+    Wrap text to a specified width with indentation.
+
+    Args:
+        text: Text to wrap
+        width: Maximum line width
+        indent: String to prepend to each line
+
+    Returns:
+        Wrapped text with indentation
+    """
+    words = text.split()
+    lines = []
+    current_line = []
+    current_length = 0
+
+    for word in words:
+        if current_length + len(word) + 1 <= width:
+            current_line.append(word)
+            current_length += len(word) + 1
+        else:
+            if current_line:
+                lines.append(indent + ' '.join(current_line))
+            current_line = [word]
+            current_length = len(word)
+
+    if current_line:
+        lines.append(indent + ' '.join(current_line))
+
+    return '\n'.join(lines)
+
+
 def format_response(result: dict) -> str:
     """
     Format the QA result for nice terminal display.
 
     Takes the raw result dictionary and creates a human-readable
-    output with the answer and source references.
+    output with the answer, source references, and confidence scores.
 
     Args:
         result: Dictionary from ask_question()
@@ -438,26 +553,56 @@ def format_response(result: dict) -> str:
     Output Format:
         [Answer text]
 
-        --- Sources ---
-        [1] Page 3: "Preview of source text..."
-        [2] Page 5: "Preview of source text..."
+        --- Sources (4 chunks retrieved) ---
+
+        [1] roman_empire.txt | Page 0 | 92.5% match
+            "The Roman Empire was one of the largest empires in ancient
+            history. At its peak under Emperor Trajan, it covered..."
+
+    Confidence Score Interpretation:
+        90-100%: Highly relevant - strong match
+        70-89%:  Good relevance - likely useful
+        50-69%:  Moderate relevance - may be tangential
+        Below 50%: Low relevance - weak connection
     """
     answer = result.get("answer", "No answer found.")
     sources = result.get("source_documents", [])
+    confidence_scores = result.get("confidence_scores", [])
 
-    # Sanitize for Windows console
+    # Sanitize answer for Windows console
     output = f"\n{_sanitize_text(answer)}\n"
 
-    # Add source references
+    # Add source references with enhanced formatting
     if sources:
-        output += "\n--- Sources ---\n"
+        output += f"\n--- Sources ({len(sources)} chunks retrieved) ---\n"
+
         for i, doc in enumerate(sources, 1):
-            page = doc.metadata.get("page", "Unknown")
-            # Show first 200 chars of each source
-            preview = _sanitize_text(
-                doc.page_content[:200].replace("\n", " ")
-            )
-            output += f"\n[{i}] Page {page}:\n    \"{preview}...\"\n"
+            # Extract metadata
+            source_path = doc.metadata.get("source", "Unknown")
+            filename = _get_filename_from_path(source_path)
+            page = doc.metadata.get("page", None)
+
+            # Get confidence score
+            if i <= len(confidence_scores):
+                confidence = confidence_scores[i - 1]
+                confidence_str = f"{confidence}%"
+            else:
+                confidence_str = "N/A"
+
+            # Build the header line
+            # For PDFs: show page number
+            # For TXT/MD: no page number (they don't have pages)
+            if page is not None:
+                header = f"[{i}] {filename} | Page {page} | {confidence_str} match"
+            else:
+                header = f"[{i}] {filename} | {confidence_str} match"
+
+            # Format the preview text
+            preview_text = _format_source_preview(doc.page_content, max_length=300)
+            preview_text = _sanitize_text(preview_text)
+            wrapped_preview = _wrap_text(f'"{preview_text}"', width=65, indent="    ")
+
+            output += f"\n{header}\n{wrapped_preview}\n"
 
     return output
 

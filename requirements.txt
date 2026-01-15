@@ -40,6 +40,9 @@ anthropic>=0.18.0
 # Note: LangChain uses 'pypdf' (not 'pypdf2')
 pypdf>=3.0.0
 
+# Docx2txt for reading Microsoft Word (.docx) files
+docx2txt>=0.8
+
 # -----------------------------------------------------------------------------
 # Vector Database
 # -----------------------------------------------------------------------------
@@ -60,3 +63,10 @@ sentence-transformers>=2.3.0
 # -----------------------------------------------------------------------------
 # Load environment variables from .env file
 python-dotenv>=1.0.0
+
+# -----------------------------------------------------------------------------
+# Web Interface
+# -----------------------------------------------------------------------------
+# Streamlit - creates web apps with pure Python
+# Run with: streamlit run app.py
+streamlit>=1.30.0

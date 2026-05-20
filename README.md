@@ -215,6 +215,15 @@ Key concepts covered:
 - Conversation memory
 - Multi-document retrieval
 
+## Running Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
+
+77 tests covering config validation, document chunking logic, folder scanning, and QA helper functions (context formatting, distance-to-confidence, text sanitization) — all run without hitting any external API.
+
 ## License
 
 MIT License - Feel free to use this project for learning or as a starting point for your own applications.

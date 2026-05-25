@@ -1,3 +1,5 @@
+[![CI](https://github.com/AlonNaor22/Smart-Document-QA-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AlonNaor22/Smart-Document-QA-Agent/actions/workflows/ci.yml)
+
 # Smart Document Q&A Agent
 
 An AI-powered document question-answering system using RAG (Retrieval Augmented Generation). Upload documents and ask questions about their content - get accurate answers with source references and confidence scores.
@@ -215,20 +217,6 @@ When you ask a question, each source chunk shows a confidence score:
 | 60-79% | Good relevance - likely useful | Orange |
 | Below 60% | Lower relevance - may be tangential | Red |
 
-## Learning Resources
-
-This project is documented for learning purposes. Each source file contains:
-- Detailed docstrings explaining the concepts
-- Inline comments explaining WHY, not just WHAT
-- Educational notes section with tips for extending
-
-Key concepts covered:
-- RAG (Retrieval Augmented Generation)
-- Text embeddings and vector similarity
-- Prompt engineering
-- Conversation memory
-- Multi-document retrieval
-
 ## Running Tests
 
 ```bash
@@ -244,4 +232,3 @@ MIT License - Feel free to use this project for learning or as a starting point 
 
 ## Author
 
-Built as a portfolio project to demonstrate RAG implementation with LangChain and Claude.

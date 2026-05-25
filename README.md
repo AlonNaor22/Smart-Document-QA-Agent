@@ -152,6 +152,20 @@ Enter the path to your document OR folder
 
 The system will automatically find and load all supported files in the folder.
 
+## Docker
+
+The image pre-bakes the `all-MiniLM-L6-v2` embedding model at build time, so the first query has no download delay.
+
+```bash
+docker compose up --build
+```
+
+Then open http://localhost:8501 in your browser.
+
+- Documents placed in the `data/` folder are available inside the container
+- The vector database persists in `chroma_db/` between restarts
+- Make sure `.env` exists with `ANTHROPIC_API_KEY` before running
+
 ## Project Structure
 
 ```
